@@ -4,93 +4,106 @@ import Data.Maybe (fromJust, isJust)
 import System.Environment (getArgs)
 import System.IO (IOMode (ReadMode), hGetContents, withFile)
 
-type Byte = Int
-
+--Tape is used as a list of input characters and as the byte array
 data Tape a = Tape {tape :: [a], iterator :: Int} deriving (Show)
+
+--Action describes the kind of action taken by the interpreter when interpreting a token
+--This makes the IO portion of the interpreter seperate from the token interpreter
+data Action = Output | Input | Internal deriving (Eq, Show)
+
+type Byte = Int
 
 type BTape = Tape Byte
 
 type CTape = Tape Char
 
-data Action = Output | Input | Internal deriving (Eq, Show)
-
+-- get the current byte the pointer is pointing at
 getByte :: BTape -> Byte
 getByte (Tape arr pt) = arr !! pt
 
+-- put a byte b where the pointer is pointing at
 putByte :: Byte -> BTape -> BTape
 putByte b (Tape arr pt) = Tape arrModified pt
   where
     lh = take pt arr
-    rh = drop pt arr
+    rh = drop (pt + 1) arr
     arrModified = lh ++ b : rh
 
+-- +x or -x the current byte 
 changeByte :: Int -> BTape -> BTape
 changeByte x (Tape arr pt) = Tape arrModified pt
   where
     lh = take pt arr
     rh = drop (pt + 1) arr
-    -- currByte = if arr !! pointer == 255 &&
     arrModified = lh ++ ((arr !! pt) + x) : rh
 
+-- move the iterator forward or backward in any of the tapes
 mvIterator :: Int -> Tape a -> Tape a
-mvIterator x (Tape tp it) = Tape tp (it + x)
+mvIterator x (Tape ctp it) = Tape ctp (it + x)
 
+-- skip to the corresponding ']' when the current byte is 0 on reaching '['
 skipToEnd :: Int -> CTape -> CTape
-skipToEnd x tp
-  | x == 0 = mvIterator (-1) tp
-  | tarr !! it == '[' = skipToEnd (x + 1) (mvIterator 1 tp)
-  | tarr !! it == ']' = skipToEnd (x - 1) (mvIterator 1 tp)
-  | otherwise = skipToEnd x (mvIterator 1 tp)
+skipToEnd x ctp
+  | x == 0 = mvIterator (-1) ctp
+  | char == '[' = skipToEnd (x + 1) (mvIterator 1 ctp)
+  | char == ']' = skipToEnd (x - 1) (mvIterator 1 ctp)
+  | otherwise = skipToEnd x (mvIterator 1 ctp)
   where
-    (Tape tarr it) = tp
+    (Tape tarr it) = ctp
+    char = tarr !! it
 
+-- skip to the starting '[' when the current byte is not 0 on reaching ']'
 skipToStart :: Int -> CTape -> CTape
-skipToStart x tp
-  | x == 0 = mvIterator 1 tp
-  | tarr !! it == ']' = skipToStart (x + 1) (mvIterator (-1) tp)
-  | tarr !! it == '[' = skipToStart (x -1) (mvIterator (-1) tp)
-  | otherwise = skipToStart x (mvIterator (-1) tp)
+skipToStart x ctp
+  | x == 0 = mvIterator 1 ctp
+  | char == ']' = skipToStart (x + 1) (mvIterator (-1) ctp)
+  | char == '[' = skipToStart (x -1) (mvIterator (-1) ctp)
+  | otherwise = skipToStart x (mvIterator (-1) ctp)
   where
-    (Tape tarr it) = tp
+    (Tape tarr it) = ctp
+    char = tarr !! it
 
+--interpret the current token/character in the ctp and return new ctp and btp with the action performed
 interpretToken :: (CTape, BTape) -> (Action, CTape, BTape)
-interpretToken (tp, bArr)
-  | tarr !! it == '+' = (Internal, tp, changeByte 1 bArr)
-  | tarr !! it == '-' = (Internal, tp, changeByte (-1) bArr)
-  | tarr !! it == '>' = (Internal, tp, mvIterator 1 bArr)
-  | tarr !! it == '<' = (Internal, tp, mvIterator (-1) bArr)
-  | tarr !! it == '.' = (Output, tp, bArr)
-  | tarr !! it == ',' = (Input, tp, bArr)
-  | tarr !! it == '[' =
-    if arr !! pt == 0
-      then (Internal, skipToEnd 1 (mvIterator 1 tp), bArr)
-      else (Internal, tp, bArr)
-  | tarr !! it == ']' =
-    if arr !! pt == 0
-      then (Internal, tp, bArr)
-      else (Internal, skipToStart 1 (mvIterator (-1) tp), bArr)
-  | otherwise = (Internal, tp, bArr)
+interpretToken (ctp, btp)
+  | char == '+' = (Internal, ctp, changeByte 1 btp)
+  | char == '-' = (Internal, ctp, changeByte (-1) btp)
+  | char == '>' = (Internal, ctp, mvIterator 1 btp)
+  | char == '<' = (Internal, ctp, mvIterator (-1) btp)
+  | char == '.' = (Output, ctp, btp)
+  | char == ',' = (Input, ctp, btp)
+  | char == '[' =
+    if barr !! pt == 0
+      then (Internal, skipToEnd 1 (mvIterator 1 ctp), btp)
+      else (Internal, ctp, btp)
+  | carr !! it == ']' =
+    if barr !! pt == 0
+      then (Internal, ctp, btp)
+      else (Internal, skipToStart 1 (mvIterator (-1) ctp), btp)
+  | otherwise = (Internal, ctp, btp)
   where
-    (Tape tarr it) = tp
-    (Tape arr pt) = bArr
+    (Tape carr it) = ctp
+    (Tape barr pt) = btp
+    char = carr !! it
 
+-- recursive interpretation of the input char tape taking a initial byte tape as the second argument
 interpretTape :: CTape -> BTape -> IO ()
-interpretTape tp bArr
-  | iterator tp < length (tape tp) = do
-    let (action, tp', bArr') = interpretToken (tp, bArr)
-        tp'' = mvIterator 1 tp'
+interpretTape ctp btp
+  | iterator ctp < length (tape ctp) = do
+    let (action, ctp', btp') = interpretToken (ctp, btp)
+        ctp'' = mvIterator 1 ctp'
     case action of
       Output -> do
-        putChar (chr (getByte bArr'))
-        interpretTape tp'' bArr'
+        putChar $chr (getByte btp')
+        interpretTape ctp'' btp'
       Input -> do
         c <- getChar
-        let bArr'' = putByte (ord c) bArr'
-        interpretTape tp'' bArr''
-      Internal -> interpretTape tp'' bArr'
+        let btp'' = putByte (ord c) btp'
+        interpretTape ctp'' btp''
+      Internal -> interpretTape ctp'' btp'
   | otherwise = return ()
 
-runInterpreter :: [Char] -> IO ()
+runInterpreter :: String -> IO ()
 runInterpreter s =
   interpretTape ctp btp
   where
