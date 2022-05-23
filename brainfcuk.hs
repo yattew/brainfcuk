@@ -1,4 +1,8 @@
+import Control.Monad (forM_, when)
 import Data.Char (chr, ord)
+import Data.Maybe (fromJust, isJust)
+import System.Environment (getArgs)
+import System.IO (IOMode (ReadMode), hGetContents, withFile)
 
 type Byte = Int
 
@@ -80,14 +84,26 @@ interpretTape tp bArr
         putChar (chr (getByte bArr'))
         interpretTape tp'' bArr'
       Input -> do
-        c <- fmap head getLine
+        c <- getChar
         let bArr'' = putByte (ord c) bArr'
         interpretTape tp'' bArr''
       Internal -> interpretTape tp'' bArr'
   | otherwise = return ()
 
-runInterpreter :: String -> IO ()
-runInterpreter s = interpretTape ctp btp
+runInterpreter :: [Char] -> IO ()
+runInterpreter s =
+  interpretTape ctp btp
   where
-    ctp = Tape s 0
     btp = Tape (replicate 100 0) 0
+    ctp = Tape s 0
+
+handleCli :: IO (Maybe String)
+handleCli = do
+  args <- getArgs
+  if head args == "stdin"
+    then fmap Just getContents
+    else fmap Just (readFile (head args))
+
+main :: IO ()
+main = do
+  handleCli >>= (`forM_` runInterpreter)
