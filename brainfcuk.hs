@@ -29,7 +29,7 @@ putByte b (Tape arr pt) = Tape arrModified pt
     rh = drop (pt + 1) arr
     arrModified = lh ++ b : rh
 
--- +x or -x the current byte 
+-- +x or -x the current byte
 changeByte :: Int -> BTape -> BTape
 changeByte x (Tape arr pt) = Tape arrModified pt
   where
@@ -118,5 +118,4 @@ handleCli = do
     else fmap Just (readFile (head args))
 
 main :: IO ()
-main = do
-  handleCli >>= (`forM_` runInterpreter)
+main = handleCli >>= (`forM_` runInterpreter)
