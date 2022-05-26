@@ -4,6 +4,7 @@ module Interpreter
 where
 
 import Data.Char (chr, ord)
+import System.IO (hFlush, stdout)
 import Types (Action (..), Byte, IMode (..), Tape (Tape), TokenList)
 
 lShift :: Tape -> Tape
@@ -98,15 +99,10 @@ interpret mode tokenList tp
         Output -> do
           outputByte (currByte tp')
           interpret mode tokenList' tp'
-        Input -> case mode of
-          Repl -> do
-            c <- fmap head getLine
-            let tp'' = updateByte tp' (ord c)
-            interpret mode tokenList' tp''
-          Normal -> do
-            c <- getChar
-            let tp'' = updateByte tp' (ord c)
-            interpret mode tokenList' tp''
+        Input -> do
+          c <- getChar
+          let tp'' = updateByte tp' (ord c)
+          interpret mode tokenList' tp''
         Internal -> interpret mode tokenList' tp'
   | otherwise = return tp
   where

@@ -1,3 +1,6 @@
 # BrainFu*k Interpreter In Haskell
 
-<- Under Development ->
+to-do
+* complete Readme
+* write more examples
+* add support for nested/multiline loops in repl
