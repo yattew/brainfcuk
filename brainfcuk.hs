@@ -1,121 +1,156 @@
-import Control.Monad (forM_, when)
 import Data.Char (chr, ord)
-import Data.Maybe (fromJust, isJust)
-import System.Environment (getArgs)
-import System.IO (IOMode (ReadMode), hGetContents, withFile)
-
---Tape is used as a list of input characters and as the byte array
-data Tape a = Tape {tape :: [a], iterator :: Int} deriving (Show)
-
---Action describes the kind of action taken by the interpreter when interpreting a token
---This makes the IO portion of the interpreter seperate from the token interpreter
-data Action = Output | Input | Internal deriving (Eq, Show)
+import System.IO (BufferMode (NoBuffering), hFlush, hSetBuffering, stdout)
 
 type Byte = Int
 
-type BTape = Tape Byte
+type TokenList = ([Char], Int)
 
-type CTape = Tape Char
+data Tape = Tape
+  { left :: [Byte],
+    val :: Byte,
+    right :: [Byte]
+  }
 
--- get the current byte the pointer is pointing at
-getByte :: BTape -> Byte
-getByte (Tape arr pt) = arr !! pt
+data Action = Output | Input | Internal deriving (Eq, Show)
 
--- put a byte b where the pointer is pointing at
-putByte :: Byte -> BTape -> BTape
-putByte b (Tape arr pt) = Tape arrModified pt
+data IMode = Repl | Normal
+
+instance Show Tape where
+  show (Tape l v r) = l' ++ show v ++ r' ++ newLinePt
+    where
+      l' = foldl (\acc x -> acc ++ "|" ++ show x) "" (reverse $ take 5 l) ++ "|"
+      r' = foldl (\acc x -> acc ++ "|" ++ show x) "" (take 5 r) ++ "|"
+      lLen = length l'
+      newLinePt = "\n" ++ replicate lLen ' ' ++ "^"
+
+initTape :: Tape
+initTape = Tape (repeat 0) 0 (repeat 0)
+
+lShift :: Tape -> Tape
+lShift (Tape l v r) = Tape l' v' r'
   where
-    lh = take pt arr
-    rh = drop (pt + 1) arr
-    arrModified = lh ++ b : rh
+    (v' : l') = l
+    r' = v : r
 
--- +x or -x the current byte
-changeByte :: Int -> BTape -> BTape
-changeByte x (Tape arr pt) = Tape arrModified pt
+rShift :: Tape -> Tape
+rShift (Tape l v r) = Tape l' v' r'
   where
-    lh = take pt arr
-    rh = drop (pt + 1) arr
-    arrModified = lh ++ ((arr !! pt) + x) : rh
+    (v' : r') = r
+    l' = v : l
 
--- move the iterator forward or backward in any of the tapes
-mvIterator :: Int -> Tape a -> Tape a
-mvIterator x (Tape ctp it) = Tape ctp (it + x)
+updateByte :: Tape -> Byte -> Tape
+updateByte (Tape l v r) b = Tape l b r
 
--- skip to the corresponding ']' when the current byte is 0 on reaching '['
-skipToEnd :: Int -> CTape -> CTape
-skipToEnd x ctp
-  | x == 0 = mvIterator (-1) ctp
-  | char == '[' = skipToEnd (x + 1) (mvIterator 1 ctp)
-  | char == ']' = skipToEnd (x - 1) (mvIterator 1 ctp)
-  | otherwise = skipToEnd x (mvIterator 1 ctp)
+incrByte :: Tape -> Tape
+incrByte (Tape l v r) = Tape l v' r
   where
-    (Tape tarr it) = ctp
-    char = tarr !! it
+    v' =
+      if v + 1 > 255
+        then 0
+        else v + 1
 
--- skip to the starting '[' when the current byte is not 0 on reaching ']'
-skipToStart :: Int -> CTape -> CTape
-skipToStart x ctp
-  | x == 0 = mvIterator 1 ctp
-  | char == ']' = skipToStart (x + 1) (mvIterator (-1) ctp)
-  | char == '[' = skipToStart (x -1) (mvIterator (-1) ctp)
-  | otherwise = skipToStart x (mvIterator (-1) ctp)
+decrByte :: Tape -> Tape
+decrByte (Tape l v r) = Tape l v' r
   where
-    (Tape tarr it) = ctp
-    char = tarr !! it
+    v' =
+      if v - 1 < 0
+        then 255
+        else v -1
 
---interpret the current token/character in the ctp and return new ctp and btp with the action performed
-interpretToken :: (CTape, BTape) -> (Action, CTape, BTape)
-interpretToken (ctp, btp)
-  | char == '+' = (Internal, ctp, changeByte 1 btp)
-  | char == '-' = (Internal, ctp, changeByte (-1) btp)
-  | char == '>' = (Internal, ctp, mvIterator 1 btp)
-  | char == '<' = (Internal, ctp, mvIterator (-1) btp)
-  | char == '.' = (Output, ctp, btp)
-  | char == ',' = (Input, ctp, btp)
-  | char == '[' =
-    if barr !! pt == 0
-      then (Internal, skipToEnd 1 (mvIterator 1 ctp), btp)
-      else (Internal, ctp, btp)
-  | carr !! it == ']' =
-    if barr !! pt == 0
-      then (Internal, ctp, btp)
-      else (Internal, skipToStart 1 (mvIterator (-1) ctp), btp)
-  | otherwise = (Internal, ctp, btp)
+currByte :: Tape -> Byte
+currByte (Tape l v r) = v
+
+outputByte :: Byte -> IO ()
+outputByte b = putChar $ chr b
+
+skipToEnd :: TokenList -> Int -> TokenList
+skipToEnd (tokens, it) n
+  | n == 0 = (tokens, it - 1)
+  | char == '[' = skipToEnd (tokens, it + 1) (n + 1)
+  | char == ']' = skipToEnd (tokens, it + 1) (n -1)
+  | otherwise = skipToEnd (tokens, it + 1) n
   where
-    (Tape carr it) = ctp
-    (Tape barr pt) = btp
-    char = carr !! it
+    char = tokens !! it
 
--- recursive interpretation of the input char tape taking a initial byte tape as the second argument
-interpretTape :: CTape -> BTape -> IO ()
-interpretTape ctp btp
-  | iterator ctp < length (tape ctp) = do
-    let (action, ctp', btp') = interpretToken (ctp, btp)
-        ctp'' = mvIterator 1 ctp'
-    case action of
-      Output -> do
-        putChar $chr (getByte btp')
-        interpretTape ctp'' btp'
-      Input -> do
-        c <- getChar
-        let btp'' = putByte (ord c) btp'
-        interpretTape ctp'' btp''
-      Internal -> interpretTape ctp'' btp'
-  | otherwise = return ()
-
-runInterpreter :: String -> IO ()
-runInterpreter s =
-  interpretTape ctp btp
+skipToStart :: TokenList -> Int -> TokenList
+skipToStart (tokens, it) n
+  | n == 0 = (tokens, it + 1)
+  | char == ']' = skipToStart (tokens, it - 1) (n + 1)
+  | char == '[' = skipToStart (tokens, it - 1) (n -1)
+  | otherwise = skipToStart (tokens, it - 1) n
   where
-    btp = Tape (replicate 100 0) 0
-    ctp = Tape s 0
+    char = tokens !! it
 
-handleCli :: IO (Maybe String)
-handleCli = do
-  args <- getArgs
-  if head args == "stdin"
-    then fmap Just getContents
-    else fmap Just (readFile (head args))
+interpretToken :: TokenList -> Tape -> (Action, TokenList, Tape)
+interpretToken tokenList tp = case token of
+  '<' -> (Internal, tokenList, lShift tp)
+  '>' -> (Internal, tokenList, rShift tp)
+  '+' -> (Internal, tokenList, incrByte tp)
+  '-' -> (Internal, tokenList, decrByte tp)
+  '[' ->
+    ( Internal,
+      if currByte tp == 0
+        then skipToEnd (tokens, it + 1) 1
+        else tokenList,
+      tp
+    )
+  ']' ->
+    ( Internal,
+      if currByte tp /= 0
+        then skipToStart (tokens, it - 1) 1
+        else tokenList,
+      tp
+    )
+  '.' -> (Output, tokenList, tp)
+  ',' -> (Input, tokenList, tp)
+  _ -> (Internal, tokenList, tp)
+  where
+    (tokens, it) = tokenList
+    token = tokens !! it
+
+interpret :: IMode -> TokenList -> Tape -> IO Tape
+interpret mode tokenList tp
+  | it < length tokens =
+    do
+      let (action, (tokens', it'), tp') = interpretToken tokenList tp
+          tokenList' = (tokens', it' + 1)
+      case action of
+        Output -> do
+          outputByte (currByte tp')
+          interpret mode tokenList' tp'
+        Input -> case mode of
+          Repl -> do
+            c <- fmap head getLine
+            let tp'' = updateByte tp' (ord c)
+            interpret mode tokenList' tp''
+          Normal -> do
+            c <- getChar
+            let tp'' = updateByte tp' (ord c)
+            interpret mode tokenList' tp''
+        Internal -> interpret mode tokenList' tp'
+  | otherwise = return tp
+  where
+    (tokens, it) = tokenList
+
+repl :: Tape -> IO ()
+repl tp = do
+  putStr ">>"
+  hFlush stdout
+  s <- getLine
+  case s of
+    ":quit" -> return ()
+    ":tape" -> do
+      print tp
+      repl tp
+    _ -> do
+      tp' <- interpret Repl (s, 0) tp
+      repl tp'
+
+cli :: IO ()
+cli = repl tp
+  where
+    tp = initTape
 
 main :: IO ()
-main = handleCli >>= (`forM_` runInterpreter)
+main = do
+  cli
