@@ -1,30 +1,10 @@
+module Interpreter
+  ( interpret,
+  )
+where
+
 import Data.Char (chr, ord)
-import System.IO (BufferMode (NoBuffering), hFlush, hSetBuffering, stdout)
-
-type Byte = Int
-
-type TokenList = ([Char], Int)
-
-data Tape = Tape
-  { left :: [Byte],
-    val :: Byte,
-    right :: [Byte]
-  }
-
-data Action = Output | Input | Internal deriving (Eq, Show)
-
-data IMode = Repl | Normal
-
-instance Show Tape where
-  show (Tape l v r) = l' ++ show v ++ r' ++ newLinePt
-    where
-      l' = foldl (\acc x -> acc ++ "|" ++ show x) "" (reverse $ take 5 l) ++ "|"
-      r' = foldl (\acc x -> acc ++ "|" ++ show x) "" (take 5 r) ++ "|"
-      lLen = length l'
-      newLinePt = "\n" ++ replicate lLen ' ' ++ "^"
-
-initTape :: Tape
-initTape = Tape (repeat 0) 0 (repeat 0)
+import Types (Action (..), Byte, IMode (..), Tape (Tape), TokenList)
 
 lShift :: Tape -> Tape
 lShift (Tape l v r) = Tape l' v' r'
@@ -131,26 +111,3 @@ interpret mode tokenList tp
   | otherwise = return tp
   where
     (tokens, it) = tokenList
-
-repl :: Tape -> IO ()
-repl tp = do
-  putStr ">>"
-  hFlush stdout
-  s <- getLine
-  case s of
-    ":quit" -> return ()
-    ":tape" -> do
-      print tp
-      repl tp
-    _ -> do
-      tp' <- interpret Repl (s, 0) tp
-      repl tp'
-
-cli :: IO ()
-cli = repl tp
-  where
-    tp = initTape
-
-main :: IO ()
-main = do
-  cli
