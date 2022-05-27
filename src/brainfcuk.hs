@@ -1,6 +1,6 @@
 import Control.Monad (when)
 import Interpreter (interpret)
-import System.Directory.Internal.Prelude (getArgs)
+import System.Environment (getArgs)
 import System.IO (BufferMode (NoBuffering), hFlush, hSetBuffering, stdout)
 import Types (IMode (..), Tape (Tape))
 
@@ -13,15 +13,26 @@ repl tp prompt = do
   hFlush stdout
   s <- getLine
   let prompt' = ',' `notElem` s
-  case s of
-    ":quit" -> return ()
-    ":tape" -> do
-      print tp
-      repl tp prompt'
-    ":clear" -> do
-      repl initTape prompt'
-    ":load" -> undefined
-    _ -> do
+  if head s == ':'
+    then do
+      let cmd = takeWhile (/= ' ') s
+          arg = dropWhile (/= ' ') s
+      case cmd of
+        ":quit" -> return ()
+        ":tape" -> do
+          print tp
+          repl tp prompt'
+        ":reset" -> do
+          repl initTape prompt'
+        ":load" -> do
+          let fileName = tail arg
+          tokens <- readFile fileName
+          tp' <- interpret Repl (tokens, 0) initTape
+          repl tp' prompt'
+        _ -> do
+          tp' <- interpret Repl (s, 0) tp
+          repl tp' prompt'
+    else do
       tp' <- interpret Repl (s, 0) tp
       repl tp' prompt'
 
