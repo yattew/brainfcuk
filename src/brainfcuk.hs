@@ -1,3 +1,4 @@
+import Control.Monad (when)
 import Interpreter (interpret)
 import System.Directory.Internal.Prelude (getArgs)
 import System.IO (BufferMode (NoBuffering), hFlush, hSetBuffering, stdout)
@@ -6,22 +7,23 @@ import Types (IMode (..), Tape (Tape))
 initTape :: Tape
 initTape = Tape (repeat 0) 0 (repeat 0)
 
-repl :: Tape -> IO ()
-repl tp = do
-  putStr ">>>"
+repl :: Tape -> Bool -> IO ()
+repl tp prompt = do
+  when prompt $ putStr "==# "
   hFlush stdout
   s <- getLine
+  let prompt' = ',' `notElem` s
   case s of
     ":quit" -> return ()
     ":tape" -> do
       print tp
-      repl tp
+      repl tp prompt'
     ":clear" -> do
-      repl initTape
+      repl initTape prompt'
     ":load" -> undefined
     _ -> do
       tp' <- interpret Repl (s, 0) tp
-      repl tp'
+      repl tp' prompt'
 
 showHelp :: IO ()
 showHelp = undefined
@@ -30,7 +32,7 @@ cli :: IO ()
 cli = do
   args <- getArgs
   case length args of
-    0 -> repl tp
+    0 -> repl tp True
     1 -> do
       let fileName = head args
       tokens <- readFile fileName
@@ -43,7 +45,7 @@ cli = do
         "-i" -> do
           tokens <- readFile fileName
           tp' <- interpret Normal (tokens, 0) tp
-          repl tp'
+          repl tp' True
         "-f" -> do
           let fileName = head args
           tokens <- readFile fileName
