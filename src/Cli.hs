@@ -36,11 +36,31 @@ showHelp = do
   putStrLn "use \":help\" in the repl to see repl usage"
   putChar '\n'
 
+
+count :: (Eq a) => a -> [a] -> Int
+count _ [] = 0
+count y (x : xs)
+  | y == x = 1 + count y xs
+  | otherwise = 0 + count y xs
+
+handleLoop :: String -> IO String
+handleLoop line
+  | ctLB == ctRB = return line
+  | ctLB > ctRB = do
+    putStr "... "
+    hFlush stdout
+    line' <- getLine
+    handleLoop (line ++ line')
+  | otherwise = undefined
+  where
+    ctLB = count '[' line
+    ctRB = count ']' line
+
 repl :: Tape -> Bool -> IO ()
 repl tp prompt = do
   when prompt $ putStr "==# "
   hFlush stdout
-  s <- getLine
+  s <- getLine >>= handleLoop
   let prompt' = ',' `notElem` s
   if null s
     then repl tp prompt'
