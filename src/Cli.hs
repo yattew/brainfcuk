@@ -7,6 +7,7 @@ import Interpreter (interpret)
 import Repl (repl)
 import System.Environment (getArgs)
 import System.IO (hPutStr)
+import Transpiler (generateCode)
 import Types (IMode (..), Tape (Tape))
 
 showHelp :: IO ()
@@ -20,8 +21,13 @@ showHelp = do
   putStrLn "         | interpret the file provided as an argument\n"
   putStrLn "    brainfcuk -i <name>"
   putStrLn "         | interpret file and start the repl in the same context of as the file\n"
+  putStrLn "    brainfcuk -c <name>"
+  putStrLn "         | compile the file to c code which can then be compiled using gcc\n"
   putStrLn "use \":help\" in the repl to see repl usage"
   putChar '\n'
+
+fName :: String -> String
+fName s = reverse (tail $ dropWhile (/= '.') (reverse s))
 
 cli :: IO ()
 cli = do
@@ -51,7 +57,10 @@ cli = do
           let fileName = head args
           tokens <- readFile fileName
           interpret Normal (tokens, 0) tp
-          return ()          
+          return ()
+        "-c" -> do
+          cFile <- fmap generateCode (readFile fileName)
+          writeFile (fName fileName ++ ".c") cFile
         _ -> putStrLn "Invalid Usage use -h to see help"
     _ -> putStrLn "Invalid Usage use -h to see help"
   where

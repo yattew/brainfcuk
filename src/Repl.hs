@@ -18,7 +18,7 @@ replHelp = do
   putStrLn "    :quit          => quit the repl"
   putStrLn "    :tape          => print the byte array"
   putStrLn "    :reset         => reset the byte array to 0"
-  putStrLn "    :load <name>   => interpret file provided as an argument"
+  putStrLn "    :load   <name> => interpret file provided as an argument"
   putChar '\n'
 
 count :: (Eq a) => a -> [a] -> Int
