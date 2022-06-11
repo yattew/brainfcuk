@@ -1,7 +1,9 @@
 -- brainfcuk to C transpiler to allow compilation of brainfcuk code
-module Transpiler(
-  generateCode
-) where
+module Transpiler
+  ( generateCode,
+  )
+where
+
 rightShift :: String
 rightShift = "pt++;"
 
@@ -10,6 +12,9 @@ leftShift = "pt--;"
 
 putC :: String
 putC = "putc(*pt,stdout);"
+
+getC :: String
+getC = "*pt = getc(stdin);"
 
 incrByte :: String
 incrByte = "(*pt)++;"
@@ -43,16 +48,24 @@ endLoop = "}"
 
 transpile :: String -> String
 transpile [] = ""
-transpile (x : xs)
-  | x == '<' = leftShift ++ transpile xs
-  | x == '>' = rightShift ++ transpile xs
-  | x == '+' = incrByte ++ transpile xs
-  | x == '-' = decrByte ++ transpile xs
-  | x == '[' = startLoop ++ transpile xs
-  | x == ']' = endLoop ++ transpile xs
-  | x == '.' = putC ++ transpile xs
-  | x == ',' = undefined
-  | otherwise = transpile xs
+transpile xs =
+  foldr
+    ( \x ->
+        (++)
+          ( case x of
+              '<' -> leftShift
+              '>' -> rightShift
+              '+' -> incrByte
+              '-' -> decrByte
+              '[' -> startLoop
+              ']' -> endLoop
+              '.' -> putC
+              ',' -> getC
+              _ -> ""
+          )
+    )
+    ""
+    xs
 
 generateCode :: String -> String
 generateCode xs =
