@@ -50,10 +50,13 @@ Repl Commands :
 ## Repl Examples
 <br>
 The Byte Array
-<img src="./assets/tapeExample.png">
+<br>
+<img src="./assets/tapeExample.png" width="400px">
 <br><br>
 Loading a BrainFu\*k File and Interpreting it
-<img src="./assets/loadExample.png">
+<br>
+<img src="./assets/loadExample.png" width="400px">
 <br><br>
 MultiLine Loops
-<img src="./assets/loopExample.png">
+<br>
+<img src="./assets/loopExample.png" width="400px">
